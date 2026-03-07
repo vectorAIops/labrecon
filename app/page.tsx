@@ -433,7 +433,7 @@ export default function Home() {
             Questions, ideas, feedback, or partnership conversations can go here.
           </p>
 
-          <div className="mt-8 grid gap-6 md:grid-cols-2">
+          <div className="mt-8 grid gap-6 md:grid-cols-1">
             <a
               href="mailto:quincy@labrecon.io"
               className="rounded-3xl border border-[#3a3124] bg-[#0c0c0b] p-6 transition hover:border-[#c9ab77]"
@@ -444,17 +444,7 @@ export default function Home() {
               </p>
             </a>
 
-            <a
-              href="https://www.linkedin.com/in/quincywestbrook"
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-3xl border border-[#3a3124] bg-[#0c0c0b] p-6 transition hover:border-[#c9ab77]"
-            >
-              <p className="text-xs uppercase tracking-[0.18em] text-[#a98a58]">LinkedIn</p>
-              <p className="mt-3 text-xl font-semibold text-[#f4e8ca] break-all">
-                linkedin.com/in/quincywestbrook
-              </p>
-            </a>
+
           </div>
 
           <p className="mt-10 text-sm text-[#a89268]">
