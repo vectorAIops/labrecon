@@ -433,7 +433,7 @@ export default function Home() {
             Questions, ideas, feedback, or partnership conversations can go here.
           </p>
 
-          <div className="mt-8 grid gap-6 md:grid-cols-1">
+          <div className="mt-8 max-w-xl">
             <a
               href="mailto:quincy@labrecon.io"
               className="rounded-3xl border border-[#3a3124] bg-[#0c0c0b] p-6 transition hover:border-[#c9ab77]"
