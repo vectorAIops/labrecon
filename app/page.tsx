@@ -83,9 +83,9 @@ export default function Home() {
 
       <header className="sticky top-0 z-50 border-b border-[#3a3124] bg-[#070707]/85 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 md:px-10">
-          <a href="#top" className="text-lg font-bold tracking-[0.18em] text-[#f0dfb8]">
-            LABRECON
-          </a>
+        <a href="#top" className="text-2xl font-bold tracking-[0.18em] text-[#f0dfb8]">
+  LABRECON
+</a>
 
           <nav className="hidden gap-6 text-sm font-medium text-[#ceb98e] md:flex">
             <a href="#shop-tests" className="transition hover:text-[#f4e8ca]">Shop Tests</a>
