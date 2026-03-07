@@ -434,14 +434,22 @@ export default function Home() {
           </p>
 
           <div className="mt-8 max-w-xl">
-            <a
-              href="mailto:quincy@labrecon.io"
-              className="rounded-3xl border border-[#3a3124] bg-[#0c0c0b] p-6 transition hover:border-[#c9ab77]"
-            >
+          <a
+  href="mailto:quincy@labrecon.io"
+  className="block rounded-3xl border border-[#3a3124] bg-[#0c0c0b] p-6 transition hover:border-[#c9ab77]"
+>
               <p className="text-xs uppercase tracking-[0.18em] text-[#a98a58]">Email</p>
-              <p className="mt-3 text-xl font-semibold text-[#f4e8ca]">
-                quincy@labrecon.io
-              </p>
+              <div className="mt-8 max-w-xl">
+  <a
+    href="mailto:quincy@labrecon.io"
+    className="block rounded-3xl border border-[#3a3124] bg-[#0c0c0b] p-6 transition hover:border-[#c9ab77]"
+  >
+    <p className="text-xs uppercase tracking-[0.18em] text-[#a98a58]">Email</p>
+    <p className="mt-3 break-all text-xl font-semibold text-[#f4e8ca]">
+      quincy@labrecon.io
+    </p>
+  </a>
+</div>
             </a>
 
 
