@@ -13,6 +13,16 @@ import {
 
 type Totals = Record<string, number>;
 
+// ── Location Types ────────────────────────────────────────────────
+// Scaffold for future zipcode and location-based pricing support.
+// Extend as zipcode resolution and provider lookup are implemented.
+type LocationContext = {
+  zipcode: string;
+  city?: string;   // future: resolved from zipcode lookup
+  state?: string;  // future: resolved from zipcode lookup
+  // future: coordinates, nearbyLabs, locationPricing
+};
+
 // ── Helpers ──────────────────────────────────────────────────────
 
 function dollars(value: number) {
@@ -256,11 +266,13 @@ function RunningTotalPanel({
   totals,
   cheapestProvider,
   hasSelection,
+  location,
 }: {
   selectedLabData: LabTest[];
   totals: Totals;
   cheapestProvider: { name: string; value: number };
   hasSelection: boolean;
+  location: LocationContext | null;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -324,6 +336,18 @@ function RunningTotalPanel({
         >
           <div className="overflow-hidden">
             <div className="max-h-[66vh] overflow-y-auto border-t border-[#2a2218]">
+              {/* Location context — shows active ZIP when set; future: city, state, nearby labs */}
+              {location && (
+                <div className="flex items-center gap-3 border-b border-[#2a2218] px-5 py-2.5 sm:px-6">
+                  <span className="text-xs uppercase tracking-[0.14em] text-[#5a4930]">
+                    Location
+                  </span>
+                  <span className="rounded border border-[#3a3124] bg-[#0c0b09] px-2 py-0.5 font-mono text-xs text-[#9c845c]">
+                    {location.zipcode}
+                  </span>
+                </div>
+              )}
+
               {/* Section 1 — Total by Provider */}
               <div className="border-b border-[#2a2218] px-5 py-5 sm:px-6">
                 <p className="mb-4 text-xs uppercase tracking-[0.2em] text-[#5a4930]">
@@ -493,6 +517,8 @@ function RunningTotalPanel({
 
 export default function Home() {
   const [selectedTests, setSelectedTests] = useState<string[]>([]);
+  const [zipcodeInput, setZipcodeInput] = useState("");
+  const [location, setLocation] = useState<LocationContext | null>(null);
 
   const groupedTests = useMemo(() => {
     return labTests.reduce<Record<string, LabTest[]>>((acc, test) => {
@@ -534,9 +560,25 @@ export default function Home() {
     );
   };
 
+  // Validates and commits a 5-digit ZIP — city/state resolution is future work
+  const handleSetLocation = () => {
+    if (/^\d{5}$/.test(zipcodeInput.trim())) {
+      setLocation({ zipcode: zipcodeInput.trim() });
+    }
+  };
+
   return (
     // pb-20 gives clearance for the fixed panel's collapsed bar
     <main className="min-h-screen bg-[#050505] text-[#e7d7b1] pb-20">
+      {/* Keyframes for the zipcode module glow — used by .zip-glow class */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        @keyframes zip-glow {
+          0%, 100% { box-shadow: 0 0 0 0 transparent; }
+          50% { box-shadow: 0 0 0 1px rgba(201,171,119,0.22), 0 0 12px 0 rgba(201,171,119,0.1); }
+        }
+        .zip-glow { animation: zip-glow 2.5s ease-in-out infinite; }
+        @media (prefers-reduced-motion: reduce) { .zip-glow { animation: none; } }
+      `}} />
       <div className="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_top,rgba(199,168,117,0.14),transparent_28%),radial-gradient(circle_at_bottom,rgba(199,168,117,0.08),transparent_22%)]" />
       <div className="fixed inset-0 -z-10 opacity-[0.08] [background-image:linear-gradient(rgba(231,215,177,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(231,215,177,0.08)_1px,transparent_1px)] [background-size:44px_44px]" />
 
@@ -604,6 +646,7 @@ export default function Home() {
               >
                 About the Project
               </a>
+
             </div>
 
             <div className="mt-10 grid gap-4 sm:grid-cols-3">
@@ -628,7 +671,7 @@ export default function Home() {
                   No Account
                 </p>
                 <p className="mt-2 text-lg font-semibold text-[#f4e8ca]">
-                  Sign-up for notifications when prices
+                  No Sign-up Required
                 </p>
               </div>
             </div>
@@ -699,9 +742,45 @@ export default function Home() {
                 Your selection
               </p>
               <p className="mt-2 text-sm leading-7 text-[#7a6a50]">
-                Select tests below. Your running total appears at the bottom of
-                the screen — collapsed by default, expandable for the full
-                breakdown.
+                Start by entering your ZIP code for future local pricing, then
+                choose your tests below. Your running total appears at the
+                bottom of the screen — collapsed by default, expandable for the
+                full breakdown.
+              </p>
+            </div>
+
+            {/* Local Pricing — zipcode scaffold for future location-based pricing */}
+            <div className="zip-glow mt-4 rounded-xl border border-[#2c2419] bg-[#0c0b09] px-4 py-4 transition-colors focus-within:border-[#5a4930] hover:border-[#5a4930]">
+              <p className="text-xs uppercase tracking-[0.18em] text-[#a98a58]">
+                Local Pricing
+              </p>
+              <p className="mt-2 text-xs leading-6 text-[#7a6a50]">
+                Enter your ZIP code to prepare for location-based pricing and
+                nearby lab availability.
+              </p>
+              <div className="mt-3 flex items-stretch overflow-hidden rounded-lg border border-[#3a3124] bg-[#0f0e0c] transition-colors focus-within:border-[#c9ab77]">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={5}
+                  placeholder="Enter ZIP code"
+                  aria-label="ZIP code for local pricing"
+                  value={zipcodeInput}
+                  onChange={(e) =>
+                    setZipcodeInput(e.target.value.replace(/\D/g, ""))
+                  }
+                  onKeyDown={(e) => e.key === "Enter" && handleSetLocation()}
+                  className="w-full bg-transparent px-3 py-2 text-sm text-[#f4e8ca] placeholder:text-[#3a3124] focus:outline-none"
+                />
+                <button
+                  onClick={handleSetLocation}
+                  className="shrink-0 border-l border-[#3a3124] px-3 py-2 text-xs font-semibold text-[#e7d7b1] transition-colors hover:text-[#f4e8ca]"
+                >
+                  Set Location
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-[#3a3124]">
+                {location ? `ZIP: ${location.zipcode}` : "No location selected"}
               </p>
             </div>
           </div>
@@ -771,7 +850,7 @@ export default function Home() {
               Mission
             </p>
             <h2 className="mt-3 text-3xl font-bold text-[#f6ead0] sm:text-4xl">
-              Pricing clarity without the runaround.
+              Clearer lab pricing. Faster decisions. Less wasted money.
             </h2>
           </div>
 
@@ -781,9 +860,10 @@ export default function Home() {
                 Why this exists
               </h3>
               <p className="mt-3 leading-7 text-[#cdbd98]">
-                Delays, confusion, and opaque pricing around labwork create
-                unnecessary stress. LabRecon makes pricing faster to find and
-                easier to compare.
+                Getting self-pay labwork should not require digging through
+                multiple websites, guessing which tests match, or wasting money
+                on the wrong option. LabRecon exists to make that process
+                simpler, clearer, and faster.
               </p>
             </div>
             <div className="rounded-3xl border border-[#3a3124] bg-[#0d0d0c] p-6">
@@ -791,9 +871,8 @@ export default function Home() {
                 Who it is for
               </h3>
               <p className="mt-3 leading-7 text-[#cdbd98]">
-                Veterans, uninsured patients, families paying cash, TRT/HRT
-                users, and anyone who wants clearer options before spending
-                money on lab testing.
+                LabRecon is for anyone paying out of pocket for labwork and
+                wanting a simpler way to compare prices and options.
               </p>
             </div>
             <div className="rounded-3xl border border-[#3a3124] bg-[#0d0d0c] p-6">
@@ -801,8 +880,8 @@ export default function Home() {
                 Core goal
               </h3>
               <p className="mt-3 leading-7 text-[#cdbd98]">
-                A free tool that compares pricing honestly, saves time, and
-                keeps more money in your pocket.
+                Help people find the right self-pay lab tests at the best
+                available price without the usual confusion.
               </p>
             </div>
           </div>
@@ -827,31 +906,33 @@ export default function Home() {
               About Me
             </p>
             <h2 className="mt-3 text-3xl font-bold text-[#f6ead0] sm:text-4xl">
-              Built by a disabled USAF veteran trying to make one useful thing.
+              Veteran Built. Less Guesswork. Better Bloodwork.
             </h2>
 
             <div className="mt-6 space-y-5 text-base leading-8 text-[#cdbd98]">
               <p>
-                I created LabRecon because I know firsthand how frustrating it
-                is to deal with delays, confusion, and runaround when trying to
-                get labwork handled.
+                LabRecon started because I needed lab work, needed answers, and
+                got stuck in the same slow, frustrating process many people run
+                into with medical providers and the VA. It took weeks just to
+                get a response, and when I finally did, the appointment offered
+                was more than three months out. When you need answers
+                yesterday, that timeline does not cut it.
               </p>
               <p>
-                This is a bootstrap project built by one veteran learning to
-                code, learning web development, and learning AI implementation —
-                while trying to build something genuinely useful for other
-                people.
+                What followed was a stupid amount of time spent figuring out
+                which labs I needed, then digging through different sites to
+                find the best value.
               </p>
               <p>
-                The goal is simple: a free tool that helps users compare labwork
-                pricing clearly and make better decisions faster.
+                I built LabRecon to make that process simpler for veterans and
+                anyone else paying out of pocket for labs.
               </p>
             </div>
 
             <div className="mt-8 rounded-2xl border border-[#4f402b] bg-[#0d0d0c] p-5 text-[#d8c59b]">
               <p className="italic leading-8">
-                "LabRecon exists because finding labwork pricing should not feel
-                like a side mission full of delays, dead ends, and nonsense."
+                "People should not have to waste time and money just to figure
+                out which labs they need and what they cost."
               </p>
             </div>
           </div>
@@ -862,13 +943,13 @@ export default function Home() {
       <section id="contact" className="border-t border-[#3a3124] bg-[#080808]">
         <div className="mx-auto max-w-7xl px-6 py-20 md:px-10">
           <p className="text-sm uppercase tracking-[0.22em] text-[#b89a67]">
-            Contact
+            Get in Touch
           </p>
           <h2 className="mt-3 text-3xl font-bold text-[#f6ead0] sm:text-4xl">
-            Contact LabRecon
+            Reach out by email or connect through LinkedIn and Reddit.
           </h2>
           <p className="mt-4 max-w-2xl leading-7 text-[#cdbd98]">
-            Questions, feedback, ideas, or partnership conversations.
+            Questions, feedback, ideas, or business inquiries.
           </p>
 
           <div className="mt-8 flex max-w-sm flex-col gap-3">
@@ -884,7 +965,10 @@ export default function Home() {
                 <p className="text-xs uppercase tracking-[0.16em] text-[#a98a58]">
                   Email
                 </p>
-                <p className="mt-0.5 truncate font-semibold text-[#f4e8ca]">
+                <p className="mt-0.5 font-semibold text-[#f4e8ca]">
+                  Send an email
+                </p>
+                <p className="mt-0.5 truncate text-xs text-[#9c845c]">
                   quincy@labrecon.io
                 </p>
               </div>
@@ -900,7 +984,17 @@ export default function Home() {
               <span className="shrink-0 text-[#a98a58] transition-colors group-hover:text-[#c9ab77]">
                 <LinkedInIcon />
               </span>
-              <p className="font-semibold text-[#f4e8ca]">LinkedIn</p>
+              <div className="min-w-0">
+                <p className="text-xs uppercase tracking-[0.16em] text-[#a98a58]">
+                  LinkedIn
+                </p>
+                <p className="mt-0.5 font-semibold text-[#f4e8ca]">
+                  Connect on LinkedIn
+                </p>
+                <p className="mt-0.5 truncate text-xs text-[#9c845c]">
+                  Quincy Westbrook
+                </p>
+              </div>
             </a>
 
             {/* Reddit */}
@@ -913,14 +1007,24 @@ export default function Home() {
               <span className="shrink-0 text-[#a98a58] transition-colors group-hover:text-[#c9ab77]">
                 <RedditIcon />
               </span>
-              <p className="font-semibold text-[#f4e8ca]">Reddit</p>
+              <div className="min-w-0">
+                <p className="text-xs uppercase tracking-[0.16em] text-[#a98a58]">
+                  Reddit
+                </p>
+                <p className="mt-0.5 font-semibold text-[#f4e8ca]">
+                  Visit the subreddit
+                </p>
+                <p className="mt-0.5 truncate text-xs text-[#9c845c]">
+                  r/LabRecon
+                </p>
+              </div>
             </a>
           </div>
 
           <p className="mt-10 text-sm text-[#a89268]">
-            LabRecon is intended to help users compare pricing and reduce
-            friction. It is not a medical provider and does not provide medical
-            advice.
+            LabRecon helps users compare self-pay lab pricing and understand
+            testing options more clearly. It is not a medical provider and does
+            not offer medical advice, diagnosis, or treatment.
           </p>
         </div>
       </section>
@@ -931,6 +1035,7 @@ export default function Home() {
         totals={totals}
         cheapestProvider={cheapestProvider}
         hasSelection={hasSelection}
+        location={location}
       />
     </main>
   );
