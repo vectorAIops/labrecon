@@ -54,9 +54,6 @@ venv/
 # OS files
 Thumbs.db
 
-# Scraper temporary files
-scraper/debug/
-scraper/output/
 
 # Misc
 .git.zip
