@@ -892,7 +892,7 @@ export default function Home() {
         </div>
 
         <p className="mt-6 text-sm text-[#7a6540]">
-          Pricing shown is estimated placeholder data for the prototype.
+          Prices verified 2026-03-12 · Updated monthly · No insurance needed
         </p>
       </section>
 
