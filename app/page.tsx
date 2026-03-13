@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import {
   labTests,
   activeProviders,
@@ -74,7 +75,7 @@ function TestRow({
 
   const validPrices = activeProviders
     .map((p) => test.pricing[p.id])
-    .filter((p): p is number => p !== undefined);
+    .filter((p): p is number => p !== undefined && p !== null);
   const minPrice = validPrices.length > 0 ? Math.min(...validPrices) : null;
 
   return (
@@ -88,36 +89,51 @@ function TestRow({
         className="grid items-center px-4 py-4 text-sm text-[#e6d5ae]"
         style={{ gridTemplateColumns: shopColTemplate }}
       >
-        {/* Test name — expand toggle */}
-        <button
-          onClick={() => setIsOpen((v) => !v)}
-          className="flex items-center gap-2 text-left"
-          aria-expanded={isOpen}
-        >
-          <span
-            className={`font-medium transition-colors duration-150 ${
-              isOpen ? "text-[#c9ab77]" : "text-[#f4e8ca] hover:text-[#c9ab77]"
-            }`}
+        {/* Test name — expand toggle + optional detail page link */}
+        <div className="flex items-center gap-2 min-w-0">
+          <button
+            onClick={() => setIsOpen((v) => !v)}
+            className="flex items-center gap-2 text-left min-w-0"
+            aria-expanded={isOpen}
           >
-            {test.displayName}
-          </span>
-          <ChevronIcon
-            className={`shrink-0 transition-transform duration-200 ${
-              isOpen ? "text-[#c9ab77] rotate-180" : "text-[#5a4930]"
-            }`}
-          />
-        </button>
+            <span
+              className={`font-medium transition-colors duration-150 ${
+                isOpen ? "text-[#c9ab77]" : "text-[#f4e8ca] hover:text-[#c9ab77]"
+              }`}
+            >
+              {test.displayName}
+            </span>
+            <ChevronIcon
+              className={`shrink-0 transition-transform duration-200 ${
+                isOpen ? "text-[#c9ab77] rotate-180" : "text-[#5a4930]"
+              }`}
+            />
+          </button>
+          {!test.bundle && (
+            <Link
+              href={`/tests/${test.id}`}
+              className="shrink-0 text-[#4a3d2a] transition-colors hover:text-[#c9ab77]"
+              title={`View ${test.displayName} detail page`}
+            >
+              ↗
+            </Link>
+          )}
+        </div>
 
         {/* Provider price columns */}
         {activeProviders.map((p: Provider) => {
           const price = test.pricing[p.id];
-          const isBest = price !== undefined && price === minPrice;
+          const isBest = price !== null && price !== undefined && price === minPrice;
           return (
             <div
               key={p.id}
               className={isBest ? "font-semibold text-[#c9ab77]" : ""}
             >
-              {price !== undefined ? dollars(price) : "—"}
+              {price === null ? (
+                <span className="text-[#4a4030] text-xs">Not available</span>
+              ) : price !== undefined ? (
+                dollars(price)
+              ) : "—"}
             </div>
           );
         })}
@@ -192,6 +208,33 @@ function TestRow({
                 <p className="text-xs leading-6 text-[#7a6a50]">{test.notes}</p>
               </div>
             )}
+
+            {/* Order links — one per provider that has a price and URL */}
+            {(() => {
+              const links = activeProviders.flatMap((p) => {
+                const price = test.pricing[p.id];
+                const url = test.orderUrls?.[p.id];
+                if (price === null || price === undefined || !url) return [];
+                const isBase = BASE_CATALOG_URLS.has(url);
+                return [{ p, url, isBase }];
+              });
+              if (links.length === 0) return null;
+              return (
+                <div className="mt-5 flex flex-wrap gap-2">
+                  {links.map(({ p, url, isBase }) => (
+                    <a
+                      key={p.id}
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-lg border border-[#4b3d2a] bg-[#11100d] px-3 py-1.5 text-xs font-semibold text-[#cfbe98] transition hover:border-[#c9ab77] hover:text-[#f4e8ca]"
+                    >
+                      {isBase ? `View catalog · ${p.label}` : `Order · ${p.label}`}
+                    </a>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
         </div>
       </div>
@@ -255,6 +298,13 @@ const PROVIDER_AFFILIATE_URLS: Record<string, string> = {
   labcorp: "#", // TODO: replace with LabCorp affiliate link
   goodlabs: "#", // TODO: replace with GoodLabs affiliate link
 };
+
+// URLs that point to a general catalog page rather than a specific product.
+// Order buttons linking to these get the label "View catalog" instead of "Order".
+const BASE_CATALOG_URLS = new Set([
+  "https://www.questhealth.com/shop-tests",
+  "https://app.hellogoodlabs.com/book-tests",
+]);
 
 // ── Running Total Panel ───────────────────────────────────────────
 // Fixed bottom drawer — slides up when tests are selected.
@@ -465,7 +515,7 @@ function RunningTotalPanel({
                   {selectedLabData.map((test, i) => {
                     const validPrices = activeProviders
                       .map((p) => test.pricing[p.id])
-                      .filter((v): v is number => v !== undefined);
+                      .filter((v): v is number => v !== undefined && v !== null);
                     const minPrice =
                       validPrices.length > 0 ? Math.min(...validPrices) : null;
                     const isLast = i === selectedLabData.length - 1;
@@ -486,7 +536,7 @@ function RunningTotalPanel({
                         {activeProviders.map((p) => {
                           const price = test.pricing[p.id];
                           const isBest =
-                            price !== undefined && price === minPrice;
+                            price !== null && price !== undefined && price === minPrice;
                           return (
                             <p
                               key={p.id}
@@ -496,7 +546,11 @@ function RunningTotalPanel({
                                   : "text-[#8a7a62]"
                               }`}
                             >
-                              {price !== undefined ? dollars(price) : "—"}
+                              {price === null ? (
+                                <span className="text-[#4a4030] text-xs">Not available</span>
+                              ) : price !== undefined ? (
+                                dollars(price)
+                              ) : "—"}
                             </p>
                           );
                         })}
@@ -540,7 +594,7 @@ export default function Home() {
     for (const test of selectedLabData) {
       for (const p of activeProviders) {
         const price = test.pricing[p.id];
-        if (price !== undefined) acc[p.id] += price;
+        if (price !== null && price !== undefined) acc[p.id] += price;
       }
     }
     return acc;

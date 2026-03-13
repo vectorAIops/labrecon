@@ -2,27 +2,28 @@
 
 import asyncio
 import json
-import random
 from pathlib import Path
 
 from playwright.async_api import async_playwright
 
-from scraper.tests_catalog import TESTS
-from scraper.utils.matching import find_match
+from scraper.provider_mappings import PROVIDER_NAMES
 from scraper.utils.pricing import parse_price
 
-# ---- CSS Selectors (update these when site changes) ----
-SEARCH_INPUT_SELECTOR = "input[type='search']"   # SELECTOR: verify against labcorpondemand.com DOM
-CATEGORY_SELECTOR = ".category"                     # SELECTOR: verify
-TEST_CARD_SELECTOR = ".test-card"                   # SELECTOR: verify
-TEST_NAME_SELECTOR = ".test-card h3"                # SELECTOR: verify
-PRICE_SELECTOR = ".test-card .price"                # SELECTOR: verify
+# Reverse lookup: exact LabCorp name -> internal test ID
+# Built at import time — only populated once labcorp mappings are confirmed.
+_LABCORP_EXACT: dict[str, str] = {
+    v["labcorp"]: tid
+    for tid, v in PROVIDER_NAMES.items()
+    if v.get("labcorp") is not None
+}
 
-UA_LIST = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0",
-]
+# ---- CSS Selectors (verified 2026-03-12 against ondemand.labcorp.com DOM) ----
+TEST_CARD_SELECTOR = "a.productcollection__item"
+CARD_DATA_SELECTOR = ".productlist__item-actions"  # holds data-name and data-price
+LOAD_MORE_SELECTOR = "button[class*='more']"
+
+# Firefox UA — matches quest.py browser context setup
+FIREFOX_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0"
 
 
 async def scrape_labcorp(headed: bool = False) -> tuple[dict[str, float | None], list[str]]:
@@ -37,76 +38,74 @@ async def scrape_labcorp(headed: bool = False) -> tuple[dict[str, float | None],
             await page.screenshot(path=str(debug_dir / "labcorp_error.png"))
         except Exception:
             pass
-        flags.append("labcorp: scraping error \u2014 see debug/labcorp_error.png")
+        flags.append("labcorp: scraping error - see debug/labcorp_error.png")
         print(msg)
-
-    async def fetch_test_prices(page, test_name: str) -> None:
-        try:
-            await page.fill(SEARCH_INPUT_SELECTOR, test_name)
-            await page.wait_for_selector(TEST_CARD_SELECTOR, state="visible",
-                                         timeout=10_000)
-            await asyncio.sleep(1.5)
-
-            cards = await page.query_selector_all(TEST_CARD_SELECTOR)
-            for card in cards:
-                name_el = await card.query_selector(TEST_NAME_SELECTOR)
-                price_el = await card.query_selector(PRICE_SELECTOR)
-
-                if name_el and price_el:
-                    name = (await name_el.text_content() or "").strip()
-                    price_text = (await price_el.text_content() or "").strip()
-
-                    # Flag "Starting at" prices
-                    if "starting at" in price_text.lower():
-                        flags.append(
-                            f"labcorp: \"{name}\" shows \"Starting at\" price"
-                        )
-
-                    # Flag "Add to Cart" prices and skip
-                    if "add to cart" in price_text.lower():
-                        flags.append(
-                            f"labcorp: \"{name}\" requires add-to-cart for price, skipped"
-                        )
-                        continue
-
-                    test_id, match_type = find_match(name, TESTS)
-                    if test_id:
-                        price, price_flags = parse_price(price_text)
-                        prices[test_id] = price
-                        flags.extend(price_flags)
-                        if match_type == "fuzzy":
-                            flags.append(
-                                f"labcorp: fuzzy match \"{name}\" -> {test_id}"
-                            )
-                    else:
-                        flags.append(f"labcorp: no match for \"{name}\"")
-        except Exception as e:
-            await handle_error(page, f"labcorp: error searching \"{test_name}\": {e}")
 
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=not headed)
-            context = await browser.new_context(user_agent=random.choice(UA_LIST))
+            context = await browser.new_context(user_agent=FIREFOX_UA)
             page = await context.new_page()
             await page.set_viewport_size({"width": 1280, "height": 900})
 
             try:
+                # Navigate to catalog
                 await page.goto("https://www.ondemand.labcorp.com/products",
                                 wait_until="networkidle", timeout=30_000)
-                await asyncio.sleep(1.5)
+                await page.wait_for_timeout(3000)
 
-                # Try category-based navigation first
-                categories = await page.query_selector_all(CATEGORY_SELECTOR)
-                if categories:
-                    for category in categories:
-                        await category.click()
-                        await asyncio.sleep(1.5)
-                        for test in TESTS:
-                            await fetch_test_prices(page, test["name"])
-                else:
-                    # Fall back to search-based approach
-                    for test in TESTS:
-                        await fetch_test_prices(page, test["name"])
+                # Dismiss cookie/consent banner if present
+                try:
+                    accept_btn = await page.query_selector("#onetrust-accept-btn-handler")
+                    if accept_btn and await accept_btn.is_visible():
+                        await accept_btn.click()
+                        await page.wait_for_timeout(1000)
+                except Exception:
+                    pass
+
+                # Click "Load More" until all tests are loaded
+                prev_count = 0
+                while True:
+                    load_more = await page.query_selector(LOAD_MORE_SELECTOR)
+                    if not load_more:
+                        break
+                    is_visible = await load_more.is_visible()
+                    if not is_visible:
+                        break
+                    await page.wait_for_timeout(2000)
+                    await load_more.click()
+                    await page.wait_for_timeout(2000)
+                    # Stop if card count hasn't grown (button stuck / all loaded)
+                    cards_now = await page.query_selector_all(TEST_CARD_SELECTOR)
+                    if len(cards_now) == prev_count:
+                        break
+                    prev_count = len(cards_now)
+
+                # Scrape all test cards
+                cards = await page.query_selector_all(TEST_CARD_SELECTOR)
+                print(f"labcorp: found {len(cards)} test cards")
+
+                for card in cards:
+                    data_el = await card.query_selector(CARD_DATA_SELECTOR)
+                    if not data_el:
+                        continue
+
+                    name = (await data_el.get_attribute("data-name") or "").strip()
+                    price_text = (await data_el.get_attribute("data-price") or "").strip()
+
+                    if not name or not price_text:
+                        continue
+
+                    test_id = _LABCORP_EXACT.get(name)
+
+                    if test_id:
+                        price, price_flags = parse_price(price_text)
+                        prices[test_id] = price
+                        flags.extend(price_flags)
+                        print(f"  matched: {name} -> {test_id} = {price}")
+                    else:
+                        print(f"  no match: {name} | {price_text}")
+
             except Exception as e:
                 await handle_error(page, f"labcorp: navigation error: {e}")
             finally:

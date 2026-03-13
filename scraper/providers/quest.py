@@ -2,26 +2,29 @@
 
 import asyncio
 import json
-import random
 from pathlib import Path
 
 from playwright.async_api import async_playwright
 
-from scraper.tests_catalog import TESTS
-from scraper.utils.matching import find_match
+from scraper.provider_mappings import PROVIDER_NAMES
 from scraper.utils.pricing import parse_price
 
+# Reverse lookup: exact Quest name -> internal test ID
+# Built once at import time from confirmed mappings in provider_mappings.py
+_QUEST_EXACT: dict[str, str] = {
+    v["quest"]: tid
+    for tid, v in PROVIDER_NAMES.items()
+    if v.get("quest") is not None
+}
+
 # ---- CSS Selectors (verified 2026-03-10 against questhealth.com DOM) ----
-TEST_CARD_SELECTOR = "a.qd-product-tile-link"
+TEST_CARD_SELECTOR = "div.qd-product-tile-body"
 TEST_NAME_SELECTOR = "h3.qd-product-tile-name"
 PRICE_SELECTOR = ".qd-product-tile-price strong"
 SHOW_MORE_SELECTOR = "button#search-results-more"
 
-UA_LIST = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0",
-]
+# Firefox UA — used for browser context to reduce bot detection fingerprint
+FIREFOX_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0"
 
 
 async def scrape_quest(headed: bool = False) -> tuple[dict[str, float | None], list[str]]:
@@ -42,7 +45,7 @@ async def scrape_quest(headed: bool = False) -> tuple[dict[str, float | None], l
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=not headed)
-            context = await browser.new_context(user_agent=random.choice(UA_LIST))
+            context = await browser.new_context(user_agent=FIREFOX_UA)
             page = await context.new_page()
             await page.set_viewport_size({"width": 1280, "height": 900})
 
@@ -50,7 +53,7 @@ async def scrape_quest(headed: bool = False) -> tuple[dict[str, float | None], l
                 # Navigate to catalog
                 await page.goto("https://www.questhealth.com/shop-tests",
                                 wait_until="networkidle", timeout=30_000)
-                await asyncio.sleep(2)
+                await page.wait_for_timeout(2000)
 
                 # Dismiss cookie consent banner if present
                 try:
@@ -69,6 +72,7 @@ async def scrape_quest(headed: bool = False) -> tuple[dict[str, float | None], l
                     is_visible = await show_more.is_visible()
                     if not is_visible:
                         break
+                    await page.wait_for_timeout(2000)
                     await show_more.click()
                     await asyncio.sleep(1.5)
 
@@ -77,9 +81,6 @@ async def scrape_quest(headed: bool = False) -> tuple[dict[str, float | None], l
                 print(f"quest: found {len(cards)} test cards")
 
                 for card in cards:
-                    inner = await card.inner_html()
-                    print(inner[:200])
-                    break
                     name_el = await card.query_selector(TEST_NAME_SELECTOR)
                     price_el = await card.query_selector(PRICE_SELECTOR)
 
@@ -92,17 +93,15 @@ async def scrape_quest(headed: bool = False) -> tuple[dict[str, float | None], l
                     if not name or not price_text:
                         continue
 
-                    test_id, match_type = find_match(name, TESTS)
+                    test_id = _QUEST_EXACT.get(name)
 
                     if test_id:
                         price, price_flags = parse_price(price_text)
                         prices[test_id] = price
                         flags.extend(price_flags)
-                        if match_type == "fuzzy":
-                            flags.append(f"quest: fuzzy match \"{name}\" -> {test_id}")
                         print(f"  matched: {name} -> {test_id} = {price}")
                     else:
-                        print(f"  no match: {name} | {price_text}") 
+                        print(f"  no match: {name} | {price_text}")
 
             except Exception as e:
                 await handle_error(page, f"quest: navigation error: {e}")
